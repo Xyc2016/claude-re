@@ -1,0 +1,52 @@
+name: Build and release TypeScript agent runtime
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install and compile TypeScript
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          node dist/index.js --version
+      - name: Package compiled runtime
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then tag="$REF_NAME"; fi
+          case "$tag" in v*) ;; *) echo "tag must start with v" >&2; exit 1 ;; esac
+          tar -czf "claude-re-${tag}.tar.gz" dist package.json package-lock.json README.md
+          sha256sum "claude-re-${tag}.tar.gz" > SHA256SUMS
+          echo "tag=$tag" >> "$GITHUB_ENV"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.tag }}
+          name: TypeScript agent runtime ${{ env.tag }}
+          generate_release_notes: true
+          files: |
+            claude-re-${{ env.tag }}.tar.gz
+            SHA256SUMS
