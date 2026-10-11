@@ -55,6 +55,12 @@ export interface ConversationMessage {
   content: string | readonly ContentBlock[];
 }
 
+export interface SystemTextBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface AgentUsage {
   input_tokens: number;
   output_tokens: number;
@@ -81,7 +87,8 @@ export interface ToolDefinition {
 
 export interface AgentTurnRequest {
   model: string;
-  system?: string;
+  stream?: boolean;
+  system?: string | readonly SystemTextBlock[];
   messages: readonly ConversationMessage[];
   tools?: readonly ToolDefinition[];
   max_tokens: number;

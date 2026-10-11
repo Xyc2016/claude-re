@@ -7,11 +7,14 @@
   "scripts": {
     "build": "npm run build:typescript",
     "build:typescript": "tsc -p tsconfig.json",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts",
+    "observe:reference": "node --import tsx tests/observe-reference.ts",
     "start": "node dist/index.js",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "tsx": "^4.20.3",
     "typescript": "^5.9.0"
   }
 }

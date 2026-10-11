@@ -21,6 +21,23 @@ npm ci
 npm run check
 npm run build
 node dist/index.js --version
+npm test
+```
+
+The tests include direct tool contracts and a deterministic Messages API
+fixture. With the installed reference CLI, run the differential suite:
+
+```bash
+CLAUDE_REFERENCE_BINARY="$HOME/.local/share/claude/versions/2.1.285" \
+  node --import tsx tests/differential.ts
+```
+
+To also record the reference process' selected filesystem, process, and network
+calls through the optional preload hook:
+
+```bash
+CLAUDE_REFERENCE_BINARY="$HOME/.local/share/claude/versions/2.1.285" \
+  npm run observe:reference
 ```
 
 To use a settings profile such as `~/.claude/my-profiles/opencode.json`:

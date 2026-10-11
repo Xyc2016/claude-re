@@ -7,6 +7,8 @@ import { builtinToolDefinitions, type BashToolInput, type EditToolInput, type Re
 
 export interface ToolContext {
   cwd: string;
+  environment?: NodeJS.ProcessEnv;
+  permissionMode?: "default" | "plan";
   runTask?: (input: Record<string, unknown>) => Promise<string>;
 }
 
@@ -17,10 +19,16 @@ export function toolDefinitions(): readonly ToolDefinition[] {
 export async function executeTool(call: ToolUseBlock, context: ToolContext): Promise<string> {
   switch (call.name) {
     case "Read": return readTool(call.input as unknown as ReadToolInput, context.cwd);
-    case "Write": return writeTool(call.input as unknown as WriteToolInput, context.cwd);
-    case "Edit": return editTool(call.input as unknown as EditToolInput, context.cwd);
-    case "Bash": return bashTool(call.input as unknown as BashToolInput, context.cwd);
+    case "Write":
+      if (context.permissionMode === "plan") throw new Error("Write is not available in plan mode");
+      return writeTool(call.input as unknown as WriteToolInput, context.cwd);
+    case "Edit":
+      if (context.permissionMode === "plan") throw new Error("Edit is not available in plan mode");
+      return editTool(call.input as unknown as EditToolInput, context.cwd);
+    case "Bash": return bashTool(call.input as unknown as BashToolInput, context.cwd, context.environment);
+    case "Agent":
     case "Task":
+      if (context.permissionMode === "plan") throw new Error("Task is not available in plan mode");
       if (!context.runTask) throw new Error("Task is unavailable in this agent context");
       return context.runTask(call.input);
     default: throw new Error(`Tool ${call.name} is not implemented by the independent runtime`);
@@ -49,15 +57,18 @@ async function editTool(input: EditToolInput, cwd: string): Promise<string> {
   const occurrences = original.split(input.old_string).length - 1;
   if (occurrences === 0) throw new Error(`old_string was not found in ${input.file_path}`);
   if (occurrences > 1 && !input.replace_all) throw new Error(`old_string occurs ${occurrences} times; use replace_all`);
-  const updated = input.replace_all ? original.split(input.old_string).join(input.new_string) : original.replace(input.old_string, input.new_string);
+  // Use a function replacer so `$&`, `$`` and `$'` in user text stay literal.
+  const replaceOnce = (value: string): string => value.replace(input.old_string, () => input.new_string);
+  const updated = input.replace_all ? original.split(input.old_string).join(input.new_string) : replaceOnce(original);
   await writeFile(path, updated, "utf8");
   return `Updated ${input.file_path}`;
 }
 
-async function bashTool(input: BashToolInput, cwd: string): Promise<string> {
+async function bashTool(input: BashToolInput, cwd: string, environment?: NodeJS.ProcessEnv): Promise<string> {
   const timeout = input.timeout ?? 120_000;
+  const contextEnvironment = environment ?? process.env;
   return new Promise((resolveResult, reject) => {
-    const child = spawn("/bin/sh", ["-c", input.command], { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("/bin/sh", ["-c", input.command], { cwd, env: contextEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk; });

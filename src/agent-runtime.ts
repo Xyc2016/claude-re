@@ -35,10 +35,13 @@ export class AgentRuntime {
     for (let turn = 1; turn <= this.config.options.maxTurns; turn += 1) {
       const request: AgentTurnRequest = {
         model: this.config.model,
+        // Claude Code streams the Messages API for every output mode; the CLI
+        // decides how much of that stream to expose after decoding it.
+        stream: true,
         max_tokens: this.config.options.maxTokens,
-        system: this.config.options.systemPrompt ?? defaultSystemPrompt(this.config.options.cwd),
+        system: this.config.options.systemPrompt ? this.config.options.systemPrompt : defaultSystemPrompt(this.config.options.cwd),
         messages,
-        tools: this.config.options.tools.length === 0 ? toolDefinitions() : toolDefinitions().filter((tool) => this.config.options.tools.includes(tool.name)),
+        tools: this.availableTools(),
       };
       const response = await this.client.createMessage(request);
       responses.push(response);
@@ -51,6 +54,8 @@ export class AgentRuntime {
         try {
           const content = await executeTool(call, {
             cwd: this.config.options.cwd,
+            environment: this.config.environment,
+            permissionMode: this.config.options.permissionMode,
             runTask: (input) => this.runTask(input, depth + 1),
           });
           results.push(createToolResult(call, content));
@@ -66,6 +71,13 @@ export class AgentRuntime {
     throw new Error(`Agent exceeded max turns (${this.config.options.maxTurns})`);
   }
 
+  private availableTools() {
+    let tools = [...toolDefinitions()];
+    if (this.config.options.bare) tools = tools.filter((tool) => ["Bash", "Edit", "Read"].includes(tool.name));
+    if (this.config.options.tools.length > 0) tools = tools.filter((tool) => this.config.options.tools.includes(tool.name));
+    return tools;
+  }
+
   private async runTask(input: Record<string, unknown>, depth: number): Promise<string> {
     const description = typeof input.description === "string" ? input.description : "subagent task";
     const prompt = typeof input.prompt === "string" ? input.prompt : description;
@@ -78,6 +90,11 @@ export class AgentRuntime {
   }
 }
 
-function defaultSystemPrompt(cwd: string): string {
-  return `You are a coding agent working in ${cwd}. Use the available tools to inspect and modify files. Explain the result concisely and do not claim to have performed actions you did not perform.`;
+function defaultSystemPrompt(cwd: string) {
+  const date = new Date().toISOString().slice(0, 10);
+  return [
+    { type: "text" as const, text: "x-anthropic-billing-header: cc_version=2.1.285.fe9; cc_entrypoint=sdk-cli;" },
+    { type: "text" as const, text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", cache_control: { type: "ephemeral" as const } },
+    { type: "text" as const, text: `CWD: ${cwd}\nDate: ${date}`, cache_control: { type: "ephemeral" as const } },
+  ];
 }

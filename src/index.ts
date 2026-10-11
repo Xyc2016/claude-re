@@ -73,7 +73,9 @@ async function readPrompt(): Promise<string> {
 function emitResult(format: string, result: { text: string; turns: number }, events: readonly Record<string, unknown>[]): void {
   if (format === "json") {
     console.log(JSON.stringify({ type: "result", subtype: "success", result: result.text, num_turns: result.turns, events }));
-  } else if (format !== "stream-json") {
+  } else if (format === "stream-json") {
+    console.log(JSON.stringify({ type: "result", subtype: "success", result: result.text, num_turns: result.turns }));
+  } else {
     console.log(result.text);
   }
 }

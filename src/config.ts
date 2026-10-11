@@ -10,6 +10,9 @@ export interface CliOptions {
   command?: string;
   prompt?: string;
   print: boolean;
+  bare: boolean;
+  dangerouslySkipPermissions: boolean;
+  permissionMode?: "default" | "plan";
   outputFormat: OutputFormat;
   settingsPath?: string;
   model?: string;
@@ -42,6 +45,8 @@ export interface RuntimeConfig {
 export function parseCliArguments(args: readonly string[]): CliOptions {
   const options: CliOptions = {
     print: false,
+    bare: false,
+    dangerouslySkipPermissions: false,
     outputFormat: "text",
     maxTurns: 50,
     maxTokens: 32_000,
@@ -59,6 +64,8 @@ export function parseCliArguments(args: readonly string[]): CliOptions {
     if (arg === "--help" || arg === "-h") options.command = "help";
     else if (arg === "--version" || arg === "-v") options.command = "version";
     else if (arg === "--print" || arg === "-p") options.print = true;
+    else if (arg === "--bare") options.bare = true;
+    else if (arg === "--dangerously-skip-permissions") options.dangerouslySkipPermissions = true;
     else if (arg === "--settings") options.settingsPath = next();
     else if (arg === "--model") options.model = next();
     else if (arg === "--system-prompt") options.systemPrompt = next();
@@ -72,10 +79,14 @@ export function parseCliArguments(args: readonly string[]): CliOptions {
     else if (arg.startsWith("--")) {
       // Permission and UI flags affect the native client, but do not alter the
       // model protocol. Accept them so existing scripts can invoke this CLI.
-      if (!new Set(["--dangerously-skip-permissions", "--bare", "--verbose", "--no-session-persistence", "--permission-mode", "--effort"]).has(arg)) {
+      if (!new Set(["--verbose", "--no-session-persistence", "--permission-mode", "--effort"]).has(arg)) {
         throw new Error(`Unknown option: ${arg}`);
       }
-      if (arg === "--permission-mode" || arg === "--effort") next();
+      if (arg === "--permission-mode") {
+        const mode = next();
+        if (mode !== "default" && mode !== "plan") throw new Error(`Unsupported permission mode: ${mode}`);
+        options.permissionMode = mode;
+      } else if (arg === "--effort") next();
     } else if (arg === "agents" || arg === "mcp" || arg === "doctor") {
       options.command = arg;
     } else positional.push(arg);
